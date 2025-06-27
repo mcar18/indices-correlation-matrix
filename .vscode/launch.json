@@ -8,7 +8,7 @@
       "program": "${workspaceFolder}/market indices correlation matrix.py",
       "console": "integratedTerminal",
       "env": {
-        "ALPHAVANTAGE_API_KEY": "XORTT4LNBNH9UAG1"
+        "ALPHAVANTAGE_API_KEY": "QKBJBA2NXTWRKEFO"
       }
     }
   ]
