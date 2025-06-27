@@ -27,7 +27,7 @@ SECTORS = [
     "XLRE",  # Real Estate
     "XLC",   # Communication Services
 ]
-LOOKBACK_DAYS = 365
+LOOKBACK_DAYS = 3650
 # ——————————————————————————————————————————————————————
 
 logging.basicConfig(
@@ -75,6 +75,18 @@ def main():
     # 2) Build DataFrame, compute returns
     df = pd.DataFrame(data_map).sort_index()
     returns = df.pct_change().dropna()
+
+    # after building df of raw Close prices:
+    print("=== PRICE–LEVEL CORRELATION ===")
+    print(df.corr().round(3))
+
+    # after computing returns:
+    returns = df.pct_change().dropna()
+    print("\n=== DAILY‐RETURN CORRELATION ===")
+    print(returns.corr().round(3))
+
+    corr = returns.corr()
+
 
     # 3) Correlation matrix
     corr = returns.corr()
