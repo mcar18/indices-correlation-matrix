@@ -1,49 +1,89 @@
+#!/usr/bin/env python3
+"""
+market_indices_correlation_stooq_full.py
+
+Download 1-year daily Close prices from Stooq for all 11 GICS sector ETFs,
+compute daily returns, and print/save the correlation matrix.
+"""
+
+import logging
+from datetime import datetime, timedelta
+from typing import Dict, Optional
+
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
+from pandas_datareader import data as pdr
 
-# Map each sector-ETF ticker to its industry name
-industry_labels = {
-    "XLK":  "Technology",
-    "XLF":  "Financials",
-    "XLE":  "Energy",
-    "XLI":  "Industrials",
-    "XLP":  "Consumer Staples",
-    "XLU":  "Utilities",
-    "XLV":  "Health Care",
-    "XLY":  "Consumer Discretionary",
-    "XLB":  "Materials",
-    "XLRE": "Real Estate"
-}
+# ——— Configuration ——————————————————————————————————————————
+SECTORS = [
+    "XLK",   # Technology
+    "XLF",   # Financials
+    "XLE",   # Energy
+    "XLI",   # Industrials
+    "XLP",   # Consumer Staples
+    "XLU",   # Utilities
+    "XLV",   # Health Care
+    "XLY",   # Consumer Discretionary
+    "XLB",   # Materials
+    "XLRE",  # Real Estate
+    "XLC",   # Communication Services
+]
+LOOKBACK_DAYS = 365
+# ——————————————————————————————————————————————————————
 
-def plot_correlation_heatmap(csv_path: str):
-    # 1) Load the correlation matrix
-    corr = pd.read_csv(csv_path, index_col=0)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    datefmt="%H:%M:%S",
+)
 
-    # 2) Build labels in industry terms
-    tickers = corr.columns.tolist()
-    labels = [industry_labels.get(t, t) for t in tickers]
+def fetch_close(ticker: str, 
+                start: datetime, 
+                end: datetime
+               ) -> Optional[pd.Series]:
+    """
+    Fetch daily Close prices for `ticker` from Stooq.
+    Returns a pd.Series indexed by date, or None on failure.
+    """
+    try:
+        df = pdr.DataReader(ticker, "stooq", start, end)
+        series = df["Close"].sort_index()
+        if series.empty:
+            raise ValueError("empty series")
+        return series
+    except Exception as e:
+        logging.error("[%s] fetch failed: %s", ticker, e)
+        return None
 
-    # 3) Create the figure
-    fig, ax = plt.subplots(figsize=(10, 8))
-    im = ax.imshow(corr.values)  # default colormap
+def main():
+    end = datetime.today()
+    start = end - timedelta(days=LOOKBACK_DAYS)
 
-    # 4) Set tick labels to industry names
-    ax.set_xticks(np.arange(len(labels)))
-    ax.set_yticks(np.arange(len(labels)))
-    ax.set_xticklabels(labels, rotation=45, ha='right')
-    ax.set_yticklabels(labels)
+    # 1) Fetch each series
+    data_map: Dict[str, pd.Series] = {}
+    for sym in SECTORS:
+        logging.info("Fetching %s …", sym)
+        s = fetch_close(sym, start, end)
+        if s is not None:
+            data_map[sym] = s
+        else:
+            logging.warning(" → %s skipped.", sym)
 
-    # 5) Annotate each cell with the correlation value
-    for i in range(corr.shape[0]):
-        for j in range(corr.shape[1]):
-            ax.text(j, i, f"{corr.iat[i, j]:.2f}",
-                    ha='center', va='center')
+    if len(data_map) < 2:
+        logging.error("Not enough data to compute correlations. Exiting.")
+        return
 
-    # 6) Add title and layout
-    plt.title("Sector ETF Daily-Return Correlation by Industry")
-    plt.tight_layout()
-    plt.show()
+    # 2) Build DataFrame, compute returns
+    df = pd.DataFrame(data_map).sort_index()
+    returns = df.pct_change().dropna()
+
+    # 3) Correlation matrix
+    corr = returns.corr()
+
+    # 4) Output
+    pd.set_option("display.precision", 4)
+    print("\nDaily‐return correlation matrix:\n", corr, "\n")
+    corr.to_csv("sector_etf_correlation_stooq_full.csv")
+    logging.info("Correlation matrix saved to sector_etf_correlation_stooq_full.csv")
 
 if __name__ == "__main__":
-    plot_correlation_heatmap("sector_etf_correlation_stooq.csv")
+    main()
