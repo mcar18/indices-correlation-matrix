@@ -29,7 +29,7 @@ from pandas_datareader import data as pdr
 SECTORS        = ["XLK","XLF","XLE","XLI","XLP","XLU","XLV","XLY","XLB","XLRE","XLC"]
 LOOKBACK_DAYS  = 3650         # target ~10 years
 VIEWS          = ["daily", "monthly", "quarterly", "yoy", "volatility", "rolling"]
-WINDOW_DAYS    = 60           # for the rolling-window view
+WINDOW_DAYS    = 5           # for the rolling-window view
 CSV_DIR        = os.path.join("supporting files", "csv")
 # ───────────────────────────────────────────────────────────────────────────────
 
