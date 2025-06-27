@@ -26,7 +26,7 @@ import pandas as pd
 from pandas_datareader import data as pdr
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
-SECTORS        = ["XLK","XLF","XLE","XLI","XLP","XLU","XLV","XLY","XLB","XLRE","XLC"]
+SECTORS        = ["SPY","XLK","XLF","XLE","XLI","XLP","XLU","XLV","XLY","XLB","XLRE","XLC"]
 LOOKBACK_DAYS  = 3650         # target ~10 years
 VIEWS          = ["daily", "monthly", "quarterly", "yoy", "volatility", "rolling"]
 WINDOW_DAYS    = 5           # for the rolling-window view
