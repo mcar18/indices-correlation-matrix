@@ -1,41 +1,34 @@
-# market_indices_correlation.py
+# market_indices_correlation_matrix.py
+#!/usr/bin/env python3
 """
+market_indices_correlation_matrix.py
+
 Download 10-year daily Close prices from Stooq for all 11 GICS sector ETFs,
-compute daily returns, and save their correlation matrix to CSV (overwriting).
+compute multiple correlation views (daily, annual, yoy, volatility),
+and save each to its own CSV (overwriting existing).
+Usage:
+  python market_indices_correlation_matrix.py
+Each run regenerates and overwrites:
+  sector_etf_correlation_daily.csv
+  sector_etf_correlation_annual.csv
+  sector_etf_correlation_yoy.csv
+  sector_etf_correlation_volatility.csv
 """
 import os
-from glob import glob
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Optional
 
 import pandas as pd
 from pandas_datareader import data as pdr
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
 SECTORS = [
-    "XLK",   # Technology
-    "XLF",   # Financials
-    "XLE",   # Energy
-    "XLI",   # Industrials
-    "XLP",   # Consumer Staples
-    "XLU",   # Utilities
-    "XLV",   # Health Care
-    "XLY",   # Consumer Discretionary
-    "XLB",   # Materials
-    "XLRE",  # Real Estate
-    "XLC",   # Communication Services
+    "XLK", "XLF", "XLE", "XLI", "XLP",
+    "XLU", "XLV", "XLY", "XLB", "XLRE", "XLC",
 ]
 LOOKBACK_DAYS = 3650  # ~10 years
-OUTPUT_CSV = "sector_etf_correlation.csv"
+VIEWS = ["daily", "annual", "yoy", "volatility"]
 # ───────────────────────────────────────────────────────────────────────────────
-
-# Remove old CSV(s)
-for f in glob(OUTPUT_CSV):
-    try:
-        os.remove(f)
-    except OSError:
-        pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,46 +37,60 @@ logging.basicConfig(
 )
 
 
-def fetch_close(ticker: str, start: datetime, end: datetime) -> Optional[pd.Series]:
+def fetch_close(ticker: str, start: datetime, end: datetime) -> pd.Series:
     """
     Fetch daily Close prices for `ticker` from Stooq.
-    Returns a pd.Series indexed by date, or None on failure.
     """
-    try:
-        df = pdr.DataReader(ticker, "stooq", start, end)
-        series = df["Close"].sort_index()
-        if series.empty:
-            raise ValueError("empty series")
-        return series
-    except Exception as e:
-        logging.error("[%s] fetch failed: %s", ticker, e)
-        return None
+    df = pdr.DataReader(ticker, "stooq", start, end)
+    return df["Close"].sort_index()
+
+
+def compute_view(df: pd.DataFrame, view: str) -> pd.DataFrame:
+    """
+    Transform price DataFrame `df` into the requested `view`:
+    - daily: daily percent returns
+    - annual: year-end percent returns
+    - yoy: rolling 252-day percent returns
+    - volatility: absolute daily returns
+    """
+    if view == "daily":
+        return df.pct_change(fill_method=None).dropna()
+    if view == "annual":
+        return df.resample('Y').last().pct_change().dropna()
+    if view == "yoy":
+        return df.pct_change(periods=252).dropna()
+    if view == "volatility":
+        return df.pct_change(fill_method=None).abs().dropna()
+    raise ValueError(f"Unknown view: {view}")
 
 
 def main():
+    # Remove old view CSVs
+    for v in VIEWS:
+        path = f"sector_etf_correlation_{v}.csv"
+        if os.path.exists(path):
+            os.remove(path)
+
     end = datetime.today()
     start = end - timedelta(days=LOOKBACK_DAYS)
 
-    data_map: Dict[str, pd.Series] = {}
+    # Fetch raw prices
+    data = {}
     for sym in SECTORS:
-        logging.info("Fetching %s …", sym)
-        s = fetch_close(sym, start, end)
-        if s is not None:
-            data_map[sym] = s
-        else:
-            logging.warning(" → %s skipped.", sym)
+        logging.info("Fetching %s…", sym)
+        try:
+            data[sym] = fetch_close(sym, start, end)
+        except Exception as e:
+            logging.error("Failed to fetch %s: %s", sym, e)
+    df = pd.DataFrame(data).dropna(how='all').sort_index()
 
-    if len(data_map) < 2:
-        logging.error("Not enough data to compute correlations. Exiting.")
-        return
-
-    df = pd.DataFrame(data_map).sort_index()
-    returns = df.pct_change(fill_method=None).dropna()
-
-    corr = returns.corr()
-    pd.set_option("display.precision", 4)
-    print("Saving correlation matrix to", OUTPUT_CSV)
-    corr.to_csv(OUTPUT_CSV)
+    # Compute and save each view's correlation
+    for v in VIEWS:
+        view_df = compute_view(df, v)
+        corr = view_df.corr()
+        out_csv = f"sector_etf_correlation_{v}.csv"
+        logging.info("Saving %s", out_csv)
+        corr.to_csv(out_csv)
 
 if __name__ == "__main__":
     main()
