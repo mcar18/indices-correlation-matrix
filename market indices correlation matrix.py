@@ -1,11 +1,10 @@
-#!/usr/bin/env python3
+# market_indices_correlation.py
 """
-market_indices_correlation_stooq_full.py
-
-Download 1-year daily Close prices from Stooq for all 11 GICS sector ETFs,
-compute daily returns, and print/save the correlation matrix.
+Download 10-year daily Close prices from Stooq for all 11 GICS sector ETFs,
+compute daily returns, and save their correlation matrix to CSV (overwriting).
 """
-
+import os
+from glob import glob
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Optional
@@ -13,7 +12,7 @@ from typing import Dict, Optional
 import pandas as pd
 from pandas_datareader import data as pdr
 
-# ——— Configuration ——————————————————————————————————————————
+# ─── Configuration ─────────────────────────────────────────────────────────────
 SECTORS = [
     "XLK",   # Technology
     "XLF",   # Financials
@@ -27,8 +26,16 @@ SECTORS = [
     "XLRE",  # Real Estate
     "XLC",   # Communication Services
 ]
-LOOKBACK_DAYS = 3650
-# ——————————————————————————————————————————————————————
+LOOKBACK_DAYS = 3650  # ~10 years
+OUTPUT_CSV = "sector_etf_correlation.csv"
+# ───────────────────────────────────────────────────────────────────────────────
+
+# Remove old CSV(s)
+for f in glob(OUTPUT_CSV):
+    try:
+        os.remove(f)
+    except OSError:
+        pass
 
 logging.basicConfig(
     level=logging.INFO,
@@ -36,10 +43,8 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
-def fetch_close(ticker: str, 
-                start: datetime, 
-                end: datetime
-               ) -> Optional[pd.Series]:
+
+def fetch_close(ticker: str, start: datetime, end: datetime) -> Optional[pd.Series]:
     """
     Fetch daily Close prices for `ticker` from Stooq.
     Returns a pd.Series indexed by date, or None on failure.
@@ -54,11 +59,11 @@ def fetch_close(ticker: str,
         logging.error("[%s] fetch failed: %s", ticker, e)
         return None
 
+
 def main():
     end = datetime.today()
     start = end - timedelta(days=LOOKBACK_DAYS)
 
-    # 1) Fetch each series
     data_map: Dict[str, pd.Series] = {}
     for sym in SECTORS:
         logging.info("Fetching %s …", sym)
@@ -72,30 +77,13 @@ def main():
         logging.error("Not enough data to compute correlations. Exiting.")
         return
 
-    # 2) Build DataFrame, compute returns
     df = pd.DataFrame(data_map).sort_index()
-    returns = df.pct_change().dropna()
-
-    # after building df of raw Close prices:
-    print("=== PRICE–LEVEL CORRELATION ===")
-    print(df.corr().round(3))
-
-    # after computing returns:
-    returns = df.pct_change().dropna()
-    print("\n=== DAILY‐RETURN CORRELATION ===")
-    print(returns.corr().round(3))
+    returns = df.pct_change(fill_method=None).dropna()
 
     corr = returns.corr()
-
-
-    # 3) Correlation matrix
-    corr = returns.corr()
-
-    # 4) Output
     pd.set_option("display.precision", 4)
-    print("\nDaily‐return correlation matrix:\n", corr, "\n")
-    corr.to_csv("sector_etf_correlation_stooq_full.csv")
-    logging.info("Correlation matrix saved to sector_etf_correlation_stooq_full.csv")
+    print("Saving correlation matrix to", OUTPUT_CSV)
+    corr.to_csv(OUTPUT_CSV)
 
 if __name__ == "__main__":
     main()
