@@ -1,85 +1,49 @@
-#!/usr/bin/env python3
-"""
-market_indices_correlation_av.py
-
-Download 1-year daily Adjusted Close from Alpha Vantage for a set of sector ETFs,
-compute daily returns, and print/save the correlation matrix.
-"""
-
-import os
-import time
-import logging
-from typing import Dict, Optional
-
 import pandas as pd
-from alpha_vantage.timeseries import TimeSeries
+import numpy as np
+import matplotlib.pyplot as plt
 
-# ——— Configuration ——————————————————————————————————————————
-SECTORS = [
-    "XLK", "XLF", "XLE", "XLI", "XLP",
-    "XLU", "XLV", "XLY", "XLB", "XLRE",
-]
-API_KEY       = os.getenv("ALPHAVANTAGE_API_KEY")
-CALLS_PER_MIN = 5
-DELAY_SEC     = 60 / CALLS_PER_MIN + 1   # ~13s between calls
-# ——————————————————————————————————————————————————————
+# Map each sector-ETF ticker to its industry name
+industry_labels = {
+    "XLK":  "Technology",
+    "XLF":  "Financials",
+    "XLE":  "Energy",
+    "XLI":  "Industrials",
+    "XLP":  "Consumer Staples",
+    "XLU":  "Utilities",
+    "XLV":  "Health Care",
+    "XLY":  "Consumer Discretionary",
+    "XLB":  "Materials",
+    "XLRE": "Real Estate"
+}
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    datefmt="%H:%M:%S",
-)
+def plot_correlation_heatmap(csv_path: str):
+    # 1) Load the correlation matrix
+    corr = pd.read_csv(csv_path, index_col=0)
 
-def fetch_av_adj_close(
-    ticker: str
-) -> Optional[pd.Series]:
-    """
-    Fetch daily adjusted close prices for the past year via Alpha Vantage.
-    Returns a pd.Series indexed by date, or None on failure.
-    """
-    if not API_KEY:
-        logging.error("ALPHAVANTAGE_API_KEY not set in environment.")
-        return None
+    # 2) Build labels in industry terms
+    tickers = corr.columns.tolist()
+    labels = [industry_labels.get(t, t) for t in tickers]
 
-    ts = TimeSeries(key=API_KEY, output_format="pandas", indexing_type="date")
-    try:
-        data, meta = ts.get_daily_adjusted(symbol=ticker, outputsize="compact")
-        # '5. adjusted close' holds the adjusted close
-        adj = data["5. adjusted close"].sort_index()
-        # keep only last 252 trading days (~1 year)
-        return adj.iloc[-252:]
-    except Exception as e:
-        logging.error("[%s] Alpha Vantage error: %s", ticker, e)
-        return None
+    # 3) Create the figure
+    fig, ax = plt.subplots(figsize=(10, 8))
+    im = ax.imshow(corr.values)  # default colormap
 
-def main():
-    # 1) Fetch each ticker one at a time
-    series_map: Dict[str, pd.Series] = {}
-    for sym in SECTORS:
-        logging.info("Fetching %s …", sym)
-        s = fetch_av_adj_close(sym)
-        if s is not None and not s.empty:
-            series_map[sym] = s
-        else:
-            logging.warning(" → %s skipped (no data).", sym)
-        time.sleep(DELAY_SEC)
+    # 4) Set tick labels to industry names
+    ax.set_xticks(np.arange(len(labels)))
+    ax.set_yticks(np.arange(len(labels)))
+    ax.set_xticklabels(labels, rotation=45, ha='right')
+    ax.set_yticklabels(labels)
 
-    if len(series_map) < 2:
-        logging.error("Not enough data to compute correlations. Exiting.")
-        return
+    # 5) Annotate each cell with the correlation value
+    for i in range(corr.shape[0]):
+        for j in range(corr.shape[1]):
+            ax.text(j, i, f"{corr.iat[i, j]:.2f}",
+                    ha='center', va='center')
 
-    # 2) Build DataFrame, compute returns
-    df = pd.DataFrame(series_map).sort_index()
-    returns = df.pct_change().dropna()
-
-    # 3) Correlation matrix
-    corr = returns.corr()
-
-    # 4) Output
-    pd.set_option("display.precision", 4)
-    print("\nDaily‐return correlation matrix:\n", corr, "\n")
-    corr.to_csv("sector_etf_correlation_av.csv")
-    logging.info("Correlation matrix saved to sector_etf_correlation_av.csv")
+    # 6) Add title and layout
+    plt.title("Sector ETF Daily-Return Correlation by Industry")
+    plt.tight_layout()
+    plt.show()
 
 if __name__ == "__main__":
-    main()
+    plot_correlation_heatmap("sector_etf_correlation_stooq.csv")
