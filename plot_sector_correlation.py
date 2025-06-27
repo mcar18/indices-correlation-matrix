@@ -1,13 +1,13 @@
+# plot_sector_correlation.py
 #!/usr/bin/env python3
 """
 plot_sector_correlation.py
 
-Scan for all ‘sector_etf_correlation_*.csv’ files, and for each:
+Scan `supporting files/csv/` for all “sector_etf_correlation_*.csv”, and for each:
   • Plot a blue–white–red heatmap with industry labels
-  • Title it according to the view (Daily, Annual, YoY, Volatility)
-  • Save as <CSV-stem>.png (overwriting any existing)
+  • Infer title from filename
+  • Save as PNG in `supporting files/png/` (overwriting existing)
 """
-
 import os
 import sys
 from glob import glob
@@ -29,9 +29,13 @@ INDUSTRY_LABELS = {
     "XLRE": "Real Estate",
     "XLC":  "Communication Services",
 }
+CSV_DIR = os.path.join("supporting files", "csv")
+PNG_DIR = os.path.join("supporting files", "png")
+
+# ensure png directory exists
+os.makedirs(PNG_DIR, exist_ok=True)
 
 def derive_title(stem: str) -> str:
-    """Infer heatmap title from the CSV stem."""
     s = stem.lower()
     if "annual" in s:
         return "Annual % Correlation"
@@ -44,19 +48,20 @@ def derive_title(stem: str) -> str:
 def plot_one(csv_path: str):
     stem = os.path.splitext(os.path.basename(csv_path))[0]
     title = derive_title(stem)
-    out_png = f"{stem}.png"
+    out_png = os.path.join(PNG_DIR, f"{stem}.png")
 
-    # Load and validate
+    # remove old if exists
+    if os.path.exists(out_png):
+        os.remove(out_png)
+
     corr = pd.read_csv(csv_path, index_col=0)
     if corr.shape[0] != corr.shape[1]:
         print(f"⚠️ Skipping {csv_path}: not square {corr.shape}", file=sys.stderr)
         return
 
-    # Prepare labels
     tickers = corr.columns.tolist()
     labels = [INDUSTRY_LABELS.get(t, t) for t in tickers]
 
-    # Plot
     fig, ax = plt.subplots(figsize=(10, 8))
     im = ax.imshow(corr.values, cmap="bwr", vmin=-1, vmax=1)
     ax.set_xticks(np.arange(len(labels)))
@@ -65,28 +70,26 @@ def plot_one(csv_path: str):
     ax.set_yticklabels(labels)
     for i in range(len(labels)):
         for j in range(len(labels)):
-            ax.text(j, i, f"{corr.iat[i,j]:.2f}",
-                    ha="center", va="center", fontsize="small")
+            ax.text(j, i, f"{corr.iat[i,j]:.2f}", ha="center", va="center", fontsize="small")
 
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label("Correlation", rotation=270, labelpad=15)
     plt.title(title)
     plt.tight_layout()
 
-    # Overwrite PNG
     fig.savefig(out_png, format="png")
     plt.close(fig)
     print(f"✅ Saved heatmap: {out_png}")
 
-def main():
-    # Optionally clear out old PNGs first:
-    for old in glob("sector_etf_correlation_*.png"):
-        try: os.remove(old)
-        except: pass
 
-    csvs = sorted(glob("sector_etf_correlation_*.csv"))
+def main():
+    # clear old PNGs
+    for f in glob(os.path.join(PNG_DIR, "*.png")):
+        os.remove(f)
+
+    csvs = sorted(glob(os.path.join(CSV_DIR, "sector_etf_correlation_*.csv")))
     if not csvs:
-        print("No sector_etf_correlation_*.csv files found.", file=sys.stderr)
+        print(f"No CSV files found in {CSV_DIR}", file=sys.stderr)
         sys.exit(1)
 
     for path in csvs:

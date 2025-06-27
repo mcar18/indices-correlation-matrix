@@ -5,14 +5,7 @@ market_indices_correlation_matrix.py
 
 Download 10-year daily Close prices from Stooq for all 11 GICS sector ETFs,
 compute multiple correlation views (daily, annual, yoy, volatility),
-and save each to its own CSV (overwriting existing).
-Usage:
-  python market_indices_correlation_matrix.py
-Each run regenerates and overwrites:
-  sector_etf_correlation_daily.csv
-  sector_etf_correlation_annual.csv
-  sector_etf_correlation_yoy.csv
-  sector_etf_correlation_volatility.csv
+and save each to its own CSV in the `supporting files/csv/` folder (overwriting existing).
 """
 import os
 import logging
@@ -28,7 +21,11 @@ SECTORS = [
 ]
 LOOKBACK_DAYS = 3650  # ~10 years
 VIEWS = ["daily", "annual", "yoy", "volatility"]
+CSV_DIR = os.path.join("supporting files", "csv")
 # ───────────────────────────────────────────────────────────────────────────────
+
+# ensure directory exists
+os.makedirs(CSV_DIR, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,10 +45,6 @@ def fetch_close(ticker: str, start: datetime, end: datetime) -> pd.Series:
 def compute_view(df: pd.DataFrame, view: str) -> pd.DataFrame:
     """
     Transform price DataFrame `df` into the requested `view`:
-    - daily: daily percent returns
-    - annual: year-end percent returns
-    - yoy: rolling 252-day percent returns
-    - volatility: absolute daily returns
     """
     if view == "daily":
         return df.pct_change(fill_method=None).dropna()
@@ -65,16 +58,15 @@ def compute_view(df: pd.DataFrame, view: str) -> pd.DataFrame:
 
 
 def main():
-    # Remove old view CSVs
-    for v in VIEWS:
-        path = f"sector_etf_correlation_{v}.csv"
-        if os.path.exists(path):
-            os.remove(path)
+    # remove old CSVs
+    for fname in os.listdir(CSV_DIR):
+        if fname.endswith('.csv'):
+            os.remove(os.path.join(CSV_DIR, fname))
 
     end = datetime.today()
     start = end - timedelta(days=LOOKBACK_DAYS)
 
-    # Fetch raw prices
+    # fetch raw prices
     data = {}
     for sym in SECTORS:
         logging.info("Fetching %s…", sym)
@@ -82,13 +74,14 @@ def main():
             data[sym] = fetch_close(sym, start, end)
         except Exception as e:
             logging.error("Failed to fetch %s: %s", sym, e)
+
     df = pd.DataFrame(data).dropna(how='all').sort_index()
 
-    # Compute and save each view's correlation
+    # compute and save each view's correlation
     for v in VIEWS:
         view_df = compute_view(df, v)
         corr = view_df.corr()
-        out_csv = f"sector_etf_correlation_{v}.csv"
+        out_csv = os.path.join(CSV_DIR, f"sector_etf_correlation_{v}.csv")
         logging.info("Saving %s", out_csv)
         corr.to_csv(out_csv)
 
